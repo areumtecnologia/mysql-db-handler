@@ -1,0 +1,14 @@
+{
+  "name": "mysql-db-handler",
+  "version": "1.0.0",
+  "description": "A powerful MySQL wrapper with connection pooling, singleton support, and advanced query handling for Node.js.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Renan Moreira / Áreum Tecnologia",
+  "license": "MIT",
+  "dependencies": {
+    "mysql2": "^3.0.0"
+  }
+}
