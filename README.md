@@ -74,7 +74,7 @@ The `select` method allows you to build complex queries using an array of parame
 *   `params` (Array): An array where each element is either a condition object or a logical string ('AND', 'OR').
     *   Simple condition: `{ column: value }` (defaults to `=`)
     *   Condition with operator: `{ column: value, operator: '>' }`
-*   `clauses` (Object): Optional keys like `ORDER BY`, `LIMIT`, `OFFSET`, `GROUP BY`, `HAVING`.
+*   `clauses` (Object): Optional keys like `ORDERBY`, `DESC`, `LIMIT`, `OFFSET`, `GROUP BY`, `HAVING`.
 
 **Example:**
 
@@ -90,7 +90,8 @@ const results = await products.select(
     ],
     // 2. Clauses: SQL Modifiers
     {
-        'ORDER BY': 'price DESC',
+        'ORDERBY': 'price',
+        'DESC': true,
         'LIMIT': 10,
         'OFFSET': 0
     }
