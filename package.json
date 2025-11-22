@@ -1,6 +1,6 @@
 {
   "name": "@areumtecnologia/mysql-db-handler",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "A powerful MySQL wrapper with connection pooling, singleton support, and advanced query handling for Node.js.",
   "main": "index.js",
   "scripts": {
