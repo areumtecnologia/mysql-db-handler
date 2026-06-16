@@ -1,4 +1,4 @@
-# mysql-db-handler
+# @areumtecnologia/mysql-db-handler
 
 A powerful MySQL wrapper with connection pooling, singleton support, and advanced query handling for Node.js.
 
@@ -13,7 +13,7 @@ A powerful MySQL wrapper with connection pooling, singleton support, and advance
 ## Installation
 
 ```bash
-npm install mysql-db-handler
+npm install @areumtecnologia/mysql-db-handler
 ```
 
 ## Basic Usage
@@ -22,7 +22,7 @@ npm install mysql-db-handler
 You can create a new instance of the database class directly.
 
 ```javascript
-const { DataBase } = require('mysql-db-handler');
+const { DataBase } = require('@areumtecnologia/mysql-db-handler');
 
 const db = new DataBase({
     host: 'localhost',
@@ -50,21 +50,36 @@ try {
 The `DataBaseHandler` simplifies interactions with specific tables.
 
 ```javascript
-const { DataBaseHandler } = require('mysql-db-handler');
+const { DataBaseHandler } = require('@areumtecnologia/mysql-db-handler');
 
 // Initialize handler for 'customers' table
 const customers = new DataBaseHandler(db, 'customers');
-
-// Select all
-const allCustomers = await customers.select();
-
-// Select with conditions
-const activeCustomers = await customers.selectBy({ status: 1 });
 ```
 
 ---
 
 ## Advanced Usage & Examples
+
+### Inserting Records (`insert`)
+
+The `insert` method adds a new row to the table.
+
+**Parameters:**
+*   `params` (Object): An object where keys match the column names and values are the data to insert.
+
+**Example:**
+
+```javascript
+const logs = new DataBaseHandler(db, 'app_logs');
+
+const result = await logs.insert({
+    level: 'info',
+    message: 'User logged in',
+    timestamp: new Date()
+});
+// Executes: INSERT INTO app_logs SET `level` = ?, `message` = ?, `timestamp` = ?
+console.log(`Inserted Row ID: ${result.insertId}`);
+```
 
 ### Flexible Selection (`select`)
 
@@ -181,20 +196,20 @@ See "Flexible Selection" above.
 #### `async selectBy(params)`
 Quickly select rows matching a specific object condition.
 *   **params**: Object. Key-value pairs for WHERE clause (e.g., `{ id: 5 }`).
-*   **Returns**: `Promise<Array>`.
+*   **Returns**: `Promise<Array>`. (contains rows array from query)
 
 #### `async insert(params)`
 Inserts a new row.
 *   **params**: Object. Key-value pairs representing column names and values.
-*   **Returns**: `Promise<OkPacket>` (contains insertId, affectedRows, etc).
+*   **Returns**: `Promise<OkPacket>` (contains insertId, or error).
 
 #### `async update(params, options)`
 See "Updating Records" above.
-*   **Returns**: `Promise<OkPacket>`.
+*   **Returns**: `Promise<OkPacket>`. (contains affectedRows or error).
 
 #### `async delete(conditions)`
 See "Deleting Records" above.
-*   **Returns**: `Promise<OkPacket>`.
+*   **Returns**: `Promise<OkPacket>`. (contains affectedRows or error)
 
 #### `async selectToDatatable(rawDtQuery, strictCondition)`
 Helper for server-side Datatables.net processing.
