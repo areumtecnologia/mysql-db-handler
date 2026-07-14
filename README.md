@@ -1,14 +1,48 @@
 # @areumtecnologia/mysql-db-handler
 
-A powerful MySQL wrapper with connection pooling, singleton support, and advanced query handling for Node.js.
+A powerful, robust, and production-ready MySQL wrapper for Node.js. It features connection pooling, query caching (optional), jQuery DataTables server-side processing integration, safe error handling, and a flexible abstraction layer for CRUD operations.
+
+## Table of Contents
+
+* [Features](#features)
+* [Installation](#installation)
+* [Core Classes](#core-classes)
+  * [DataBase (Standard Connection)](#1-database-standard-connection)
+  * [DataBase (With Query & Schema Caching)](#2-database-with-query--schema-caching)
+  * [DataBaseHandler (CRUD Abstraction)](#3-databasehandler-crud-abstraction)
+* [Basic Usage](#basic-usage)
+  * [1. Initializing Connection](#1-initializing-connection)
+  * [2. Executing Raw SQL](#2-executing-raw-sql)
+  * [3. Using the DataBaseHandler](#3-using-the-databasehandler)
+* [Advanced Querying (`select` method)](#advanced-querying-select-method)
+  * [Basic Selection](#basic-selection)
+  * [Working with the `IN` and `NOT IN` Operators](#working-with-the-in-and-not-in-operators)
+    * [Automatic `IN` Detection](#automatic-in-detection)
+    * [Explicit `IN` / `NOT IN` Operator](#explicit-in--not-in-operator)
+    * [Empty Array Safety (`IN ()` Protection)](#empty-array-safety-in-protection)
+  * [Combining Multiple Conditions (AND / OR)](#combining-multiple-conditions-and--or)
+* [CRUD Operations](#crud-operations)
+  * [Inserting Records (`insert`)](#inserting-records-insert)
+  * [Updating Records (`update`)](#updating-records-update)
+  * [Deleting Records (`delete`)](#deleting-records-delete)
+* [jQuery DataTables Server-Side Support](#jquery-datatables-server-side-support)
+* [Database Singleton Pattern](#database-singleton-pattern)
+* [Error Handling Strategy](#error-handling-strategy)
+* [Contributing](#contributing)
+* [License](#license)
+
+---
 
 ## Features
 
-*   **Connection Pooling:** Efficiently manages database connections.
-*   **Promise-based:** Fully supports `async/await` for clean code.
-*   **Table Handler:** An abstraction layer to perform CRUD operations easily.
-*   **Datatables Integration:** Built-in helper to parse and query data specifically for jQuery Datatables server-side processing.
-*   **Singleton Support:** Includes a singleton pattern setup for easy global access.
+* **Connection Pooling:** Efficiently manages and recycles database connections using `mysql2/promise`.
+* **Flexible Query Builder:** Run complex operations without writing manual SQL strings.
+* **Automatic `IN` Handling:** Smart processing of arrays for SQL `IN` and `NOT IN` operations (including prevention of empty array query crashes).
+* **Optional Caching Wrapper:** Native support for query and schema caching using `node-cache` to boost performance.
+* **Server-Side DataTables Integration:** Effortless integration with jQuery DataTables server-side requests, handling filters, sorting, search (global and column-based), regex, and count totals automatically.
+* **Robust Error Handling:** Intercepts and wraps database errors in predictable objects to prevent application crashes.
+
+---
 
 ## Installation
 
@@ -16,206 +50,318 @@ A powerful MySQL wrapper with connection pooling, singleton support, and advance
 npm install @areumtecnologia/mysql-db-handler
 ```
 
+If you wish to use the caching features, ensure `node-cache` is installed:
+```bash
+npm install node-cache
+```
+
+---
+
+## Core Classes
+
+The package exports the following primary components:
+
+### 1. `DataBase` (Standard Connection)
+Located in `lib/database.js`. Manages standard pooled connections, schema discovery, and query execution.
+
+### 2. `DataBase` (With Query & Schema Caching)
+Located in `lib/database-cache.js`. Overrides the standard `DataBase` implementation to provide in-memory query and table schema caching. It is ideal for read-heavy environments.
+
+### 3. `DataBaseHandler` (CRUD Abstraction)
+Located in `lib/databasehandler.js`. Bind this class to a specific table to perform database actions through utility methods (`select`, `selectBy`, `insert`, `update`, `delete`, `selectToDatatable`).
+
+---
+
 ## Basic Usage
 
-### 1. Initialize Connection
-You can create a new instance of the database class directly.
+### 1. Initializing Connection
 
 ```javascript
 const { DataBase } = require('@areumtecnologia/mysql-db-handler');
 
+// Configuration matches mysql2 connection configuration
 const db = new DataBase({
     host: 'localhost',
     user: 'root',
     password: 'password',
     database: 'my_app_db',
     port: 3306,
-    connectionLimit: 10
+    connectionLimit: 10,
+    waitForConnections: true,
+    queueLimit: 0
 });
 ```
 
 ### 2. Executing Raw SQL
-Use the `query` method to execute standard SQL.
+
+Raw queries are executed through connection pooling. The library handles obtaining and releasing the connection automatically.
 
 ```javascript
 try {
-    const rows = await db.query('SELECT * FROM users WHERE active = ?', [1]);
-    console.log(rows);
+    const rows = await db.query('SELECT * FROM users WHERE active = ? AND role = ?', [1, 'editor']);
+    console.log('Active editors:', rows);
 } catch (error) {
-    console.error(error);
+    console.error('Database query failed:', error);
 }
 ```
 
 ### 3. Using the DataBaseHandler
-The `DataBaseHandler` simplifies interactions with specific tables.
+
+Wrap a table with a handler to abstract SQL construction.
 
 ```javascript
-const { DataBaseHandler } = require('@areumtecnologia/mysql-db-handler');
+const { DataBase, DataBaseHandler } = require('@areumtecnologia/mysql-db-handler');
 
-// Initialize handler for 'customers' table
-const customers = new DataBaseHandler(db, 'customers');
+const db = new DataBase({ /* config */ });
+const usersHandler = new DataBaseHandler(db, 'users');
 ```
 
 ---
 
-## Advanced Usage & Examples
+## Advanced Querying (`select` method)
 
-### Inserting Records (`insert`)
+The `select(params, clauses)` method builds complex SQL `WHERE` clauses from arrays of condition objects.
 
-The `insert` method adds a new row to the table.
+### Basic Selection
 
-**Parameters:**
-*   `params` (Object): An object where keys match the column names and values are the data to insert.
-
-**Example:**
+You can pass condition objects where the key is the column name and the value is the target value.
 
 ```javascript
-const logs = new DataBaseHandler(db, 'app_logs');
-
-const result = await logs.insert({
-    level: 'info',
-    message: 'User logged in',
-    timestamp: new Date()
-});
-// Executes: INSERT INTO app_logs SET `level` = ?, `message` = ?, `timestamp` = ?
-console.log(`Inserted Row ID: ${result.insertId}`);
+// Simple equals comparison (=)
+const users = await usersHandler.select([
+    { role: 'admin' }
+]);
+// Executes: SELECT * FROM users WHERE `role` = ?
 ```
 
-### Flexible Selection (`select`)
+### Working with the `IN` and `NOT IN` Operators
 
-The `select` method allows you to build complex queries using an array of parameters and a clauses object.
+The library provides special support for SQL `IN` operations by mapping JavaScript arrays to queries.
 
-**Parameters:**
-*   `params` (Array): An array where each element is either a condition object or a logical string ('AND', 'OR').
-    *   Simple condition: `{ column: value }` (defaults to `=`)
-    *   Condition with operator: `{ column: value, operator: '>' }`
-*   `clauses` (Object): Optional keys like `ORDERBY`, `DESC`, `LIMIT`, `OFFSET`, `GROUP BY`, `HAVING`.
-
-**Example:**
+#### Automatic `IN` Detection
+If a condition's value is an array, and no operator is explicitly set, the query builder automatically treats it as an `IN` statement:
 
 ```javascript
-const products = new DataBaseHandler(db, 'products');
+const activeUsers = await usersHandler.select([
+    { status: ['active', 'pending'] }
+]);
+// Executes: SELECT * FROM users WHERE `status` IN (?, ?)
+// Bindings: ['active', 'pending']
+```
 
-const results = await products.select(
-    // 1. Params: Conditions
+#### Explicit `IN` / `NOT IN` Operator
+You can explicitly define the `operator` as `'IN'` or `'NOT IN'`:
+
+```javascript
+// Using NOT IN explicitly
+const nonAdminUsers = await usersHandler.select([
+    { role: ['admin', 'superadmin'], operator: 'NOT IN' }
+]);
+// Executes: SELECT * FROM users WHERE `role` NOT IN (?, ?)
+// Bindings: ['admin', 'superadmin']
+```
+
+#### Empty Array Safety (`IN ()` Protection)
+In standard SQL, executing a query with an empty array in the `IN` clause (e.g., `WHERE status IN ()`) yields a syntax error and crashes the execution. The library automatically mitigates this:
+
+* **Empty `IN`**: Evaluates to `1 = 0` (always false). No records match this sub-clause, ensuring safe execution.
+* **Empty `NOT IN`**: Evaluates to `1 = 1` (always true). All records match this sub-clause, returning all values since nothing is excluded.
+
+```javascript
+// Safe empty array handling
+const results = await usersHandler.select([
+    { id: [], operator: 'IN' }
+]);
+// Executes: SELECT * FROM users WHERE 1 = 0
+
+const allResults = await usersHandler.select([
+    { id: [], operator: 'NOT IN' }
+]);
+// Executes: SELECT * FROM users WHERE 1 = 1
+```
+
+### Combining Multiple Conditions (AND / OR)
+
+Interleave condition objects with string elements representing logical operators:
+
+```javascript
+const filteredProducts = await productsHandler.select(
     [
-        { category: 'electronics' },    // WHERE `category` = 'electronics'
+        { category: 'electronics' },
         'AND',
-        { price: 1000, operator: '>' }  // AND `price` > 1000
+        { price: 500, operator: '>' },
+        'AND',
+        { brand: ['Sony', 'LG'] } // Automatically mapped to IN
     ],
-    // 2. Clauses: SQL Modifiers
     {
         'ORDERBY': 'price',
         'DESC': true,
-        'LIMIT': 10,
-        'OFFSET': 0
+        'LIMIT': 20
     }
 );
+// Executes: 
+// SELECT * FROM products WHERE `category` = ? AND `price` > ? AND `brand` IN (?, ?) ORDER BY price DESC LIMIT 20
+```
+
+---
+
+## CRUD Operations
+
+### Inserting Records (`insert`)
+
+Adds a new row to the associated table using key-value properties.
+
+```javascript
+const result = await usersHandler.insert({
+    name: 'John Doe',
+    email: 'john.doe@example.com',
+    role: 'member',
+    created_at: new Date()
+});
+
+console.log('Inserted ID:', result.insertId);
 ```
 
 ### Updating Records (`update`)
 
-The `update` method separates the values to change from the conditions.
-
-**Parameters:**
-*   `params` (Object): Contains:
-    *   `set`: Key-value pairs of columns to update.
-    *   `where`: Key-value pairs for the WHERE clause (uses `AND` implicitly between keys).
-*   `options` (Object): Optional settings, e.g., `{ useRegex: true }` to use REGEXP instead of =.
-
-**Example:**
+Performs selective updates by specifying both a `set` payload and a `where` filter.
 
 ```javascript
-const users = new DataBaseHandler(db, 'users');
-
-const result = await users.update({
+const result = await usersHandler.update({
     set: {
-        status: 'inactive',
-        last_seen: new Date()
+        status: 'suspended',
+        notes: 'Violated terms of service'
     },
     where: {
-        id: 123,
-        role: 'guest'
+        id: 42,
+        status: 'active'
     }
 });
-// Executes: UPDATE users SET `status` = ?, `last_seen` = ? WHERE `id` = ? AND `role` = ?
+
+console.log('Affected rows:', result.affectedRows);
 ```
 
 ### Deleting Records (`delete`)
 
-The `delete` method removes rows matching the provided conditions.
-
-**Parameters:**
-*   `conditions` (Object): Key-value pairs to match rows to delete (uses `AND` implicitly).
-
-**Example:**
+Deletes rows matching the conditions object (joined by implicit `AND` operators).
 
 ```javascript
-const sessions = new DataBaseHandler(db, 'user_sessions');
-
-const result = await sessions.delete({
-    user_id: 55,
+const result = await usersHandler.delete({
+    status: 'temporary',
     is_expired: 1
 });
-// Executes: DELETE FROM user_sessions WHERE `user_id` = ? AND `is_expired` = ?
+
+console.log('Deleted rows:', result.affectedRows);
 ```
 
 ---
 
-## API Documentation
+## jQuery DataTables Server-Side Support
 
-### Class: `DataBase`
+The `selectToDatatable` method processes the complex nested payloads sent by jQuery DataTables server-side scripts and returns the required format.
 
-#### `constructor(config)`
-Creates a database instance with a connection pool.
-*   **config**: Object. MySQL2 connection configuration (host, user, password, database, port, connectionLimit, etc).
+```javascript
+// Express.js Route Example
+app.post('/api/users/dt', async (req, res) => {
+    // req.body contains the DataTables standard payload:
+    // { draw: 1, start: 0, length: 10, search: { value: 'John', regex: false }, columns: [...] }
+    
+    // You can enforce strict conditions that the client cannot bypass (e.g., tenant containment)
+    const strictConditions = [
+        { tenant_id: req.user.tenantId },
+        'AND',
+        { status: 'deleted', operator: '!=' }
+    ];
 
-#### `async query(sql, params)`
-Executes a SQL query using a pooled connection.
-*   **sql**: String. The SQL query to execute.
-*   **params**: Array. Parameters for the prepared statement.
-*   **Returns**: `Promise<Array|Object>`. Returns rows on success, or an error object if failed.
-
-#### `async close()`
-Closes the connection pool completely.
-*   **Returns**: `Promise<void>`.
+    const datatableResult = await usersHandler.selectToDatatable(req.body, strictConditions);
+    
+    // Returns: { draw: 1, recordsTotal: 100, recordsFiltered: 12, data: [...] }
+    res.json(datatableResult);
+});
+```
 
 ---
 
-### Class: `DataBaseHandler`
+## Database Singleton Pattern
 
-#### `constructor(database, table, expression)`
-*   **database**: Instance of `DataBase`.
-*   **table**: String. The name of the table.
-*   **expression**: String (Optional). Additional SQL expression (e.g., extra columns or joins).
+To prevent initializing redundant pool connections across various modules in a Node.js project, it is highly recommended to configure a single shared instance (Singleton).
 
-#### `async select(params, clauses)`
-See "Flexible Selection" above.
-*   **Returns**: `Promise<Array>`.
+Create a `db.js` file:
+```javascript
+// db.js
+const { DataBase } = require('@areumtecnologia/mysql-db-handler');
 
-#### `async selectBy(params)`
-Quickly select rows matching a specific object condition.
-*   **params**: Object. Key-value pairs for WHERE clause (e.g., `{ id: 5 }`).
-*   **Returns**: `Promise<Array>`. (contains rows array from query)
+const dbInstance = new DataBase({
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    connectionLimit: parseInt(process.env.DB_POOL_LIMIT) || 10
+});
 
-#### `async insert(params)`
-Inserts a new row.
-*   **params**: Object. Key-value pairs representing column names and values.
-*   **Returns**: `Promise<OkPacket>` (contains insertId, or error).
+module.exports = dbInstance;
+```
 
-#### `async update(params, options)`
-See "Updating Records" above.
-*   **Returns**: `Promise<OkPacket>`. (contains affectedRows or error).
+Import it in your business controllers/repositories:
+```javascript
+// usersRepository.js
+const db = require('./db');
+const { DataBaseHandler } = require('@areumtecnologia/mysql-db-handler');
 
-#### `async delete(conditions)`
-See "Deleting Records" above.
-*   **Returns**: `Promise<OkPacket>`. (contains affectedRows or error)
+const usersHandler = new DataBaseHandler(db, 'users');
 
-#### `async selectToDatatable(rawDtQuery, strictCondition)`
-Helper for server-side Datatables.net processing.
-*   **rawDtQuery**: Object. The request object sent by Datatables.
-*   **strictCondition**: Array. Additional strict WHERE clauses not controlled by the frontend.
-*   **Returns**: Object. Format expected by Datatables `{ draw, recordsTotal, recordsFiltered, data }`.
+module.exports = {
+    getUserById: (id) => usersHandler.selectBy({ id })
+};
+```
+
+---
+
+## Error Handling Strategy
+
+Database exceptions generated during execution are caught internally by the `DataBase` instance. This means that instead of raising unhandled exceptions that could crash your Node.js application, the library wraps the error.
+
+Specifically, the following methods from **`DataBase`** and **`DataBaseHandler`** return an object with an `error` property when an execution error occurs:
+*   `DataBase.query()`
+*   `DataBaseHandler.select()` / `selectBy()`
+*   `DataBaseHandler.insert()`
+*   `DataBaseHandler.update()`
+*   `DataBaseHandler.delete()`
+*   `DataBaseHandler.selectToDatatable()`
+
+### Example: Checking for errors in queries
+
+```javascript
+// Example with Select if column doesn't exist (triggers database error)
+const users = await usersHandler.select([{ non_existent_column: 'admin' }]);
+if (users.error) {
+    console.error('Failed to select users:', users.error.message);
+}
+
+// Example with Insert
+const insertResult = await usersHandler.insert({ name: 'John Doe' });
+if (insertResult.error) {
+    console.error('Failed to insert user:', insertResult.error.message);
+}
+
+// Example with Update
+const updateResult = await usersHandler.update({
+    set: { status: 'active' },
+    where: { id: 999 }
+});
+if (updateResult.error) {
+    console.error('Failed to update user:', updateResult.error.message);
+}
+
+// Example with Delete
+const deleteResult = await usersHandler.delete({ id: 999 });
+if (deleteResult.error) {
+    console.error('Failed to delete user:', deleteResult.error.message);
+}
+```
+
+> [!NOTE]
+> If you execute a `select` using valid columns but search for values that do not exist in the table (e.g. `await usersHandler.select([{ role: 'non_existent_role' }])`), this is **not** considered a database error. The query will execute successfully and return an empty array `[]` (without any `error` property). An error is only returned for actual database execution failures (such as syntax errors, missing columns, database connection drops, etc.).
 
 ---
 
@@ -223,11 +369,13 @@ Helper for server-side Datatables.net processing.
 
 Contributions are welcome! Please open an issue or submit a pull request.
 
-1.  Fork the repository
-2.  Create your feature branch (`git checkout -b feature/amazing-feature`)
-3.  Commit your changes (`git commit -m 'Add some amazing feature'`)
-4.  Push to the branch (`git push origin feature/amazing-feature`)
-5.  Open a Pull Request
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
 
 ## License
 
