@@ -325,16 +325,70 @@ console.log('Deleted rows:', result.affectedRows);
 
 ## jQuery DataTables Server-Side Support (`selectToDatatable`)
 
-The `selectToDatatable` method provides seamless, high-performance integration with [jQuery DataTables](https://datatables.net/) server-side processing. It automatically handles pagination, search (global and column-based), multi-column ordering, regex filters, total/filtered counts, and backend security constraints.
+The `selectToDatatable` method provides seamless, enterprise-grade, high-performance integration with [jQuery DataTables](https://datatables.net/) server-side processing. It eliminates manual SQL pagination boilerplate, automatically handling pagination, search (global and column-specific), multi-column ordering, regex filters, dual-count latency optimizations, backend security constraints, Soft Deletes, and sensitive field masking.
+
+---
+
+### Step-by-Step Execution Lifecycle (Under the Hood)
+
+Whenever `selectToDatatable(rawDtQuery, strictCondition)` is invoked, it executes the following optimized workflow:
+
+```
+[Incoming Request] (req.body or req.query)
+        │
+        ▼
+1. Hydration & Security Filter
+   • Flattens or parses bracketed keys (e.g. columns[0][data] -> { columns: [{ data: ... }] })
+   • Prototype Pollution Guard: Sanitizes __proto__, constructor, and prototype (CWE-1321)
+   • Sanitizes integers (draw, start, length) preventing NaN injections
+        │
+        ▼
+2. Backend Security & Tenant Scoping (strictCondition)
+   • Injects non-bypassable backend filters (tenant_id, account_id, branch, etc.)
+   • [v2.0.0] Injects Soft Delete filter (deletado_em IS NULL) automatically unless withTrashed() is active
+        │
+        ▼
+3. Search Clause Generation
+   • Global Search (search.value): Checks all columns where searchable == true -> (col1 LIKE ? OR col2 LIKE ?)
+   • Column-Specific Search (columns[i].search.value): Checks individual columns -> AND colN LIKE ?
+   • Regex Toggle: If regex == true, switches operator from LIKE %term% to REGEXP term
+   • Parameterized bindings: All terms use prepared statement placeholders (?) to block SQL injection
+        │
+        ▼
+4. Dual-COUNT Latency Optimization
+   • No Active Search Filter: Only 1 COUNT(*) query is executed. recordsFiltered is instantly set to recordsTotal (up to 50% database I/O reduction).
+   • Active Search Filter: Executes total COUNT(*) and filtered COUNT(*) concurrently via Promise.all().
+        │
+        ▼
+5. Short-Circuit Check
+   • If recordsFiltered === 0: The data SELECT query is skipped entirely. Returns data: [] immediately, avoiding expensive filesort and buffer allocations.
+        │
+        ▼
+6. Multi-Column Ordering & Keyset Limitation
+   • Parses all order directives (order[0], order[1], etc.)
+   • Maps column index to sanitized column name (e.g. `col1` ASC, `col2` DESC)
+   • Generates LIMIT start, length safely
+        │
+        ▼
+7. Data Retrieval & Sensitive Field Masking
+   • Executes SELECT <columns> FROM <table> [JOINS] [WHERE] [ORDER BY] [LIMIT]
+   • [v2.0.0] Strips any fields declared in hiddenFields (e.g. senha_hash, token) before output
+        │
+        ▼
+[Standard JSON Response to DataTables]
+```
+
+---
 
 ### Key Features & Performance Optimizations
 
-* **Smart Single `COUNT(*)`:** When no client-side search filter is active (the default state in standard page loads and pagination), `recordsFiltered` is automatically set to `recordsTotal`. The method skips the redundant second `COUNT(*)` query, **reducing database count latency and I/O by up to 50%**.
+* **Smart Single `COUNT(*)`:** When no client-side search filter is active (the default state during initial page load, sorting, and standard pagination), `recordsFiltered` is automatically set to `recordsTotal`. The method skips the redundant second `COUNT(*)` query, **reducing database count latency and I/O by up to 50%**.
 * **Short-Circuit on Zero Results:** If search criteria yield zero records (`recordsFiltered === 0`), the data retrieval query (`SELECT ... LIMIT`) is skipped entirely, returning an empty array `data: []` instantly without triggering expensive `filesort` or index scans.
 * **Format & Content-Type Agnostic:** Fully supports both `application/json` (with native JavaScript boolean values `true`/`false`) and `application/x-www-form-urlencoded` (nested or bracket-flattened parameters like `columns[0][data]`).
 * **Multi-Column Sorting:** Seamlessly parses multiple order directives (e.g. holding Shift or configuring `order: [[0, 'asc'], [1, 'desc']]`), producing `ORDER BY \`col1\` ASC, \`col2\` DESC`.
 * **Safe Qualified Column Identifiers:** Automatically splits table/alias qualified column names (e.g. `u.name`, `p.title`) and escapes each component separately (`` `u`.`name` ``), avoiding MySQL `ER_BAD_FIELD_ERROR` issues when using JOINs.
 * **Prototype Pollution Protection (CWE-1321):** Deeply sanitizes incoming request keys, blocking injections targeting `__proto__`, `constructor`, or `prototype`.
+* **[v2.0.0] Soft Delete & Hidden Fields Aware:** Automatically excludes soft-deleted records (`deletado_em IS NULL`) and strips sensitive columns (`hiddenFields`) from the returned JSON.
 
 ---
 
@@ -344,10 +398,24 @@ The `selectToDatatable` method provides seamless, high-performance integration w
 await handler.selectToDatatable(rawDtQuery, strictCondition = [])
 ```
 
-| Parameter | Type | Description |
+#### Parameters
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `rawDtQuery` | `Object` | **Yes** | The request payload sent by jQuery DataTables (`req.body` in POST or `req.query` in GET). Supports both bracket-flattened keys and nested JSON. |
+| `strictCondition` | `Array` \| `Object` | No | Backend constraints that the client cannot view or modify (e.g. multi-tenant isolation, user scoping, active-only filters). |
+
+#### DataTables Payload Schema (`rawDtQuery`)
+
+| Field | Type | Description |
 | :--- | :--- | :--- |
-| `rawDtQuery` | `Object` | The request payload sent by jQuery DataTables (`req.body` or `req.query`). Supports both flat bracketed keys and nested objects. |
-| `strictCondition` | `Array` *(Optional)* | Backend conditions that the client cannot view or modify (e.g. multi-tenant isolation, user scoping, active-only filters). |
+| `draw` | `number` \| `string` | Draw counter echoed back to the client to ensure response synchronization. |
+| `start` | `number` \| `string` | Zero-based paging first record indicator (`OFFSET`). Defaults to `0`. |
+| `length` | `number` \| `string` | Number of records to return (`LIMIT`). |
+| `search.value` | `string` | Global search value applied across all columns with `searchable: true`. |
+| `search.regex` | `boolean` \| `string` | If `true` or `'true'`, uses MySQL `REGEXP` instead of `LIKE %value%`. |
+| `order` | `Array<Object>` | Array of order objects: `{ column: 0, dir: 'asc' \| 'desc' }`. |
+| `columns` | `Array<Object>` | Array of column definitions: `{ data: 'col_name', searchable: true, orderable: true, search: { value: '', regex: false } }`. |
 
 ---
 
@@ -372,7 +440,7 @@ app.post('/api/users/datatable', async (req, res) => {
 
 ### Enforcing Backend Security (`strictCondition`)
 
-Never rely on the client to enforce data access boundaries. Pass a `strictCondition` array to apply non-bypassable constraints. It shares the same query-building syntax as `select()`, supporting custom operators, arrays (`IN`), and `AND`/`OR` conjunctions:
+Never rely on the client frontend to enforce data boundaries. Pass a `strictCondition` array to apply non-bypassable constraints. It shares the same query-building syntax as `select()`, supporting custom operators, arrays (`IN`), and `AND`/`OR` conjunctions:
 
 ```javascript
 app.post('/api/orders/datatable', async (req, res) => {
@@ -392,9 +460,33 @@ app.post('/api/orders/datatable', async (req, res) => {
 
 ---
 
-### Using JOINs and Custom Expressions
+### Using JOINs with DataTables
 
-If your table requires JOINs or computed fields, initialize the `DataBaseHandler` with an expression parameter:
+#### Option A: Modern Fluent Query Builder Joins (Recommended in v2.0.0)
+Chain `.selectFields()` and `.leftJoin()` / `.join()` directly with `.selectToDatatable()`:
+
+```javascript
+app.post('/api/pedidos/datatable', async (req, res) => {
+    const result = await pedidosHandler
+        .selectFields([
+            'pedidos.id', 
+            'pedidos.valor', 
+            'pedidos.criado_em',
+            { column: 'c.nome', as: 'cliente_nome' },
+            { column: 'v.nome', as: 'vendedor_nome' }
+        ])
+        .leftJoin('clientes c', 'pedidos.cliente_id', '=', 'c.id')
+        .leftJoin('vendedores v', 'pedidos.vendedor_id', '=', 'v.id')
+        .selectToDatatable(req.body, [
+            { 'pedidos.empresa_id': req.user.empresaId }
+        ]);
+
+    res.json(result);
+});
+```
+
+#### Option B: Legacy Expression Parameter
+You can also initialize the handler with a SQL expression containing the JOINs and selected columns:
 
 ```javascript
 // Table: 'sales s'
@@ -408,11 +500,35 @@ const salesHandler = new DataBaseHandler(
 );
 
 app.post('/api/sales/datatable', async (req, res) => {
-    // DataTables columns can now search and sort by qualified identifiers:
-    // e.g. columns: [{ data: 's.id' }, { data: 'c.name' }, { data: 's.amount' }]
+    // DataTables columns can search and sort by qualified identifiers (e.g. 'c.name')
     const result = await salesHandler.selectToDatatable(req.body, [
         { 's.deleted_at': null, operator: 'IS' }
     ]);
+    res.json(result);
+});
+```
+
+---
+
+### Soft Deletes & Sensitive Fields in DataTables (v2.0.0)
+
+When configuring business rules on the handler, `selectToDatatable` automatically complies without requiring manual filters:
+
+```javascript
+const clientesHandler = new DatabaseHandler(db, 'clientes', {
+    softDelete: 'deletado_em',                         // Injeta 'AND deletado_em IS NULL' automaticamente
+    hiddenFields: ['senha_hash', 'token_recuperacao'] // Remove do retorno mesmo se 'SELECT *' for usado
+});
+
+// A consulta abaixo já ignora excluídos e nunca expõe senha_hash
+app.post('/api/clientes/datatable', async (req, res) => {
+    const result = await clientesHandler.selectToDatatable(req.body);
+    res.json(result);
+});
+
+// Para consultar registos da lixeira (soft-deleted):
+app.post('/api/clientes/trash/datatable', async (req, res) => {
+    const result = await clientesHandler.onlyTrashed().selectToDatatable(req.body);
     res.json(result);
 });
 ```
