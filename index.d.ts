@@ -79,10 +79,12 @@ export interface PaginatedResult<T = any> {
 }
 
 export interface RelationDefinition {
-    relationType: 'hasMany' | 'hasOne' | 'belongsTo';
+    type?: 'hasMany' | 'hasOne' | 'belongsTo';
+    relationType?: 'hasMany' | 'hasOne' | 'belongsTo';
     handler: DataBaseHandler<any>;
     foreignKey: string;
     localKey?: string;
+    query?: (qb: DataBaseHandler<any>) => DataBaseHandler<any>;
 }
 
 export interface DatabaseHandlerOptions {
@@ -130,6 +132,9 @@ export class DataBaseHandler<T = RowDataPacket> {
     options: DatabaseHandlerOptions;
 
     static raw(sql: string): { __isRawSql: true; sql: string };
+    static hasMany(handler: DataBaseHandler<any>, foreignKey: string, localKey?: string): RelationDefinition;
+    static belongsTo(handler: DataBaseHandler<any>, foreignKey: string, localKey?: string): RelationDefinition;
+    static hasOne(handler: DataBaseHandler<any>, foreignKey: string, localKey?: string): RelationDefinition;
 
     constructor(database: DataBase, table: string, expressionOrOptions?: string | DatabaseHandlerOptions);
     withTransaction(txOrDb: any): DataBaseHandler<T>;
@@ -202,3 +207,6 @@ export class DataBaseHandler<T = RowDataPacket> {
     update(params: { set: Record<string, any>; where: any }, options?: { useRegex?: boolean }): Promise<ResultSetHeader>;
     delete(conditions: Record<string, any> | any[]): Promise<ResultSetHeader | undefined>;
 }
+
+export function raw(sql: string): { __isRawSql: true; sql: string };
+export { DataBaseHandler as DatabaseHandler, DataBase as Database, DataBaseCache as DatabaseCache };

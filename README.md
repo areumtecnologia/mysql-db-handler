@@ -23,8 +23,11 @@ A powerful, robust, and production-ready MySQL wrapper for Node.js. It features 
   * [Combining Multiple Conditions (AND / OR)](#combining-multiple-conditions-and--or)
 * [CRUD Operations](#crud-operations)
   * [Inserting Records (`insert`)](#inserting-records-insert)
+  * [Bulk Insert (`insertMany`)](#bulk-insert-insertmany)
+  * [Upsert with Smart Timestamps (`upsert`)](#upsert-with-smart-timestamps-upsert)
   * [Updating Records (`update`)](#updating-records-update)
   * [Deleting Records (`delete`)](#deleting-records-delete)
+  * [Fluent Mutations (`.where().update()` / `.delete()`)](#fluent-mutations-whereupdate--wheredelete)
 * [jQuery DataTables Server-Side Support (`selectToDatatable`)](#jquery-datatables-server-side-support-selecttodatatable)
   * [Key Features & Performance](#key-features--performance-optimizations)
   * [Method Signature](#method-signature)
@@ -42,6 +45,13 @@ A powerful, robust, and production-ready MySQL wrapper for Node.js. It features 
   * [6. Nested Transactions & Savepoints](#6-nested-transactions--savepoints)
 * [Database Singleton Pattern](#database-singleton-pattern)
 * [Error Handling Strategy](#error-handling-strategy)
+* [High-Scale Enterprise Micro-ORM (v2.0.0)](#high-scale-enterprise-micro-orm-v200)
+  * [1. Fluent Query Builder & Aggregations (`.first`, `.count`, `.paginate`, `raw`)](#1-fluent-query-builder--aggregations-first-count-paginate-raw)
+  * [2. Fluent Joins & Eager Loading (Eliminating the N+1 Problem)](#2-fluent-joins--eager-loading-eliminating-the-n1-problem)
+  * [3. Read/Write Splitting (Master + Read Replicas)](#3-readwrite-splitting-master--read-replicas)
+  * [4. Keyset Pagination & Memory-Safe Streaming](#4-keyset-pagination--memory-safe-streaming)
+  * [5. Native Business Rules: Soft Deletes, Timestamps & Lifecycle Hooks](#5-native-business-rules-soft-deletes-timestamps--lifecycle-hooks)
+  * [6. Runtime Schema Validation (Auto-Strip) & Sensitive Field Masking](#6-runtime-schema-validation-auto-strip--sensitive-field-masking)
 * [Contributing](#contributing)
 * [License](#license)
 
@@ -87,7 +97,16 @@ Located in `lib/database.js`. Manages standard pooled connections, schema discov
 Located in `lib/database-cache.js`. Overrides the standard `DataBase` implementation to provide in-memory query and table schema caching. It is ideal for read-heavy environments.
 
 ### 3. `DataBaseHandler` (CRUD Abstraction)
-Located in `lib/databasehandler.js`. Bind this class to a specific table to perform database actions through utility methods (`select`, `selectBy`, `insert`, `update`, `delete`, `selectToDatatable`).
+Located in `lib/databaseHandler.js`. Bind this class to a specific table to perform database actions through utility methods (`select`, `selectBy`, `insert`, `update`, `delete`, `selectToDatatable`).
+
+> [!NOTE]
+> **Convenção de Nomenclatura & Aliases:**
+> O pacote exporta tanto os identificadores em PascalCase com `B` maiúsculo (`DataBase`, `DataBaseHandler`, `DataBaseCache`) quanto aliases com `b` minúsculo (`Database`, `DatabaseHandler`, `DatabaseCache`), permitindo compatibilidade total com qualquer estilo de importação:
+> ```javascript
+> const { DataBase, DataBaseHandler } = require('@areumtecnologia/mysql-db-handler');
+> // ou:
+> const { Database, DatabaseHandler } = require('@areumtecnologia/mysql-db-handler');
+> ```
 
 ---
 
@@ -241,6 +260,42 @@ const result = await usersHandler.insert({
 console.log('Inserted ID:', result.insertId);
 ```
 
+### Bulk Insert (`insertMany`)
+
+Insere múltiplos registros em uma única instrução SQL (`INSERT INTO table (...) VALUES ?`), oferecendo máxima performance para cargas em lote. O método aplica sanitização de schema (`autoStripUnknown`), preenche timestamps automáticos (`criado_em` / `atualizado_em`) e dispara os hooks de ciclo de vida (`beforeInsert` / `afterInsert`) para cada registro:
+
+```javascript
+const novosUsuarios = [
+    { name: 'Alice Silva', email: 'alice@empresa.com', role: 'developer' },
+    { name: 'Bob Souza', email: 'bob@empresa.com', role: 'designer' },
+    { name: 'Carlos Lima', email: 'carlos@empresa.com', role: 'manager' }
+];
+
+const result = await usersHandler.insertMany(novosUsuarios);
+console.log('Linhas inseridas:', result.affectedRows);
+```
+
+### Upsert with Smart Timestamps (`upsert`)
+
+Executa uma operação atômica de inserção ou atualização (`INSERT INTO ... ON DUPLICATE KEY UPDATE`). Se o registro for novo, ele é inserido com os timestamps de criação e atualização. Se a chave primária ou índice único já existir, apenas os campos selecionados são atualizados, **preservando intacta a data de criação original (`criado_em` / `createdAt`)**:
+
+```javascript
+// Exemplo: Insere o produto ou atualiza apenas preco e estoque se codigo_barras já existir
+const result = await produtosHandler.upsert({
+    codigo_barras: '7891234567890',
+    nome: 'Mouse sem Fio',
+    preco: 149.90,
+    estoque: 80
+}, ['preco', 'estoque']); // 2º argumento opcional: colunas a atualizar no conflito
+
+// Se omitir o 2º argumento, atualiza todos os campos fornecidos exceto criado_em:
+await produtosHandler.upsert({
+    codigo_barras: '7891234567890',
+    nome: 'Mouse sem Fio Pro',
+    preco: 179.90
+});
+```
+
 ### Updating Records (`update`)
 
 Performs selective updates by specifying both a `set` payload and a `where` filter. The `where` filter supports both standard flat objects (where conditions are implicitly joined by `AND` using `=` or `REGEXP`) and complex array configurations (with operators, `AND`, and `OR`), sharing the same advanced querying capabilities as the `select` method.
@@ -319,6 +374,35 @@ const result = await usersHandler.delete({
 });
 
 console.log('Deleted rows:', result.affectedRows);
+```
+
+### Fluent Mutations (`.where().update()` / `.delete()`)
+
+Você pode encadear as mutações de escrita diretamente a partir do Query Builder Fluente, garantindo expressividade e legibilidade de alto nível:
+
+```javascript
+// Soft Delete (ou hard delete) diretamente com filtros encadeados:
+await pedidosHandler
+    .where('status', 'CANCELADO')
+    .where('criado_em', '<', dataLimite)
+    .delete();
+
+// Update com filtros fluentes encadeados:
+await clientesHandler
+    .where('id', 10)
+    .update({
+        set: { status: 'ATIVO', tentativas_login: 0 }
+    });
+
+// Restauração de itens da lixeira via Query Builder:
+await produtosHandler
+    .where('categoria_id', 5)
+    .restore();
+
+// Exclusão física definitiva (Hard Delete) via Query Builder:
+await logsHandler
+    .where('criado_em', '<', dataExpiracao)
+    .forceDelete();
 ```
 
 ---
@@ -458,6 +542,18 @@ app.post('/api/orders/datatable', async (req, res) => {
 });
 ```
 
+> [!IMPORTANT]
+> **Regra Obrigatória para Múltiplas Condições em `strictCondition`:**
+> Sempre forneça `strictCondition` no formato de **Array de Objetos** com conectivos explícitos (`'AND'` / `'OR'`). Se for passado um objeto único contendo múltiplas propriedades (como `{ tenant_id: 1, status: 'active' }`), o parser interno processará **apenas a primeira chave** e descartará as demais silenciosamente:
+> ```javascript
+> // Correto:
+> strictCondition: [
+>     { 'pedidos.empresa_id': req.user.empresaId },
+>     'AND',
+>     { 'pedidos.ativo': 1 }
+> ]
+> ```
+
 ---
 
 ### Using JOINs with DataTables
@@ -515,7 +611,7 @@ app.post('/api/sales/datatable', async (req, res) => {
 When configuring business rules on the handler, `selectToDatatable` automatically complies without requiring manual filters:
 
 ```javascript
-const clientesHandler = new DatabaseHandler(db, 'clientes', {
+const clientesHandler = new DataBaseHandler(db, 'clientes', {
     softDelete: 'deletado_em',                         // Injeta 'AND deletado_em IS NULL' automaticamente
     hiddenFields: ['senha_hash', 'token_recuperacao'] // Remove do retorno mesmo se 'SELECT *' for usado
 });
@@ -822,7 +918,77 @@ if (deleteResult.error) {
 
 With **v2.0.0**, `@areumtecnologia/mysql-db-handler` evolves from a single-table CRUD helper into a full-fledged enterprise Data Mapper and Micro-ORM designed for high-throughput, mission-critical systems.
 
-### 1. Fluent Joins & Eager Loading (Eliminating the N+1 Problem)
+### 1. Fluent Query Builder & Aggregations (`.first`, `.count`, `.paginate`, `raw`)
+
+O Query Builder Fluente oferece encadeamento imutável, tipagem limpa e sanitização de identificadores para construir consultas SQL expressivas sem strings manuais vulneráveis:
+
+#### Obter um Único Registro (`.first()`)
+Executa `LIMIT 1` e já desempacota o primeiro objeto ou retorna `null` caso nenhum registro atenda aos critérios:
+```javascript
+const usuario = await usuariosHandler
+    .where('email', 'admin@empresa.com')
+    .first();
+
+if (!usuario) {
+    console.log('Usuário não encontrado');
+}
+```
+
+#### Contagem Direta de Registros (`.count()`)
+Retorna diretamente o valor numérico de linhas encontradas:
+```javascript
+const totalAtivos = await usuariosHandler
+    .where('status', 'ATIVO')
+    .count(); // Retorna: 42
+```
+
+#### Expressões SQL Brutas Seguras (`raw`)
+Utilize a função `raw` para incorporar cálculos e funções do MySQL em `selectFields`:
+```javascript
+const { raw } = require('@areumtecnologia/mysql-db-handler');
+
+const resumo = await pedidosHandler
+    .selectFields([
+        'status',
+        raw('COUNT(*) AS total_pedidos'),
+        raw('SUM(valor) AS montante_total'),
+        raw('AVG(valor) AS ticket_medio')
+    ])
+    .where('criado_em', '>=', '2026-01-01')
+    .groupBy('status')
+    .having('montante_total > ?', [10000])
+    .orderBy('montante_total', 'DESC')
+    .get();
+```
+
+#### Paginação Tradicional com Metadados (`.paginate()`)
+Para telas administrativas convencionais com barra de navegação paginada (Página 1 de 10):
+```javascript
+const resultado = await pedidosHandler.paginate({
+    page: 2,
+    limit: 15,
+    where: [{ status: 'PAGO' }],
+    orderBy: 'id DESC'
+});
+
+// resultado:
+// {
+//   data: [...],       // Array de 15 pedidos da página 2
+//   total: 150,        // Total de pedidos no banco
+//   page: 2,           // Página atual
+//   limit: 15,         // Limite por página
+//   totalPages: 10     // Total de páginas disponíveis
+// }
+```
+
+> [!TIP]
+> **Quando usar `paginate` vs `cursorPaginate`:**
+> * Use `.paginate()` para telas administrativas com paginação numerada tradicional em tabelas pequenas e médias (< 100.000 linhas).
+> * Use `.cursorPaginate()` (Keyset Pagination) para feeds infinitos, exportações e tabelas de alta escala com milhões de linhas, onde o custo de `OFFSET` seria proibitivo.
+
+---
+
+### 2. Fluent Joins & Eager Loading (Eliminating the N+1 Problem)
 
 #### Fluent Joins with Automatic Identifier Sanitization
 Chain `.join()`, `.leftJoin()`, `.rightJoin()`, or `.innerJoin()` directly on the query builder with support for table aliases:
@@ -845,18 +1011,19 @@ const pedidosComItens = await pedidosHandler
         type: 'hasMany',
         handler: itensHandler,
         foreignKey: 'pedido_id',
-        localKey: 'id'
+        localKey: 'id',
+        query: (qb) => qb.where('ativo', 1).orderBy('sequencia', 'ASC') // Filtro e ordenação customizados
     })
-    .with('cliente', DatabaseHandler.belongsTo(clientesHandler, 'cliente_id', 'id'))
+    .with('cliente', DataBaseHandler.belongsTo(clientesHandler, 'cliente_id', 'id'))
     .get();
 
-// pedidosComItens[0].itens -> Array de itens do pedido 1
+// pedidosComItens[0].itens -> Array de itens ativos do pedido 1
 // pedidosComItens[0].cliente -> Objeto do cliente associado
 ```
 
 ---
 
-### 2. Read/Write Splitting (Master + Read Replicas)
+### 3. Read/Write Splitting (Master + Read Replicas)
 
 Scale read traffic horizontally across multiple cloud replicas (e.g. AWS Aurora, GCP Cloud SQL, Azure Database for MySQL) with automatic Round-Robin load balancing and strict transactional sticky sessions:
 
@@ -885,9 +1052,18 @@ await db.transaction(async () => {
 });
 ```
 
+> [!WARNING]
+> **Atenção em Queries SQL Manuais (`db.query`):**
+> Ao executar mutações brutas sem o `DataBaseHandler` (`INSERT`, `UPDATE`, `DELETE`), o 3º argumento booleano `isWrite = true` é **obrigatório**:
+> ```javascript
+> // Se omitir o 3º argumento, um INSERT manual pode cair em uma réplica read-only!
+> await db.query('INSERT INTO logs SET ?', [data], true);
+> ```
+> No `DataBaseHandler`, todas as operações de escrita (`insert`, `insertMany`, `upsert`, `update`, `delete`) já encaminham automaticamente para o Master (`isWrite = true`).
+
 ---
 
-### 3. Keyset Pagination & Memory-Safe Streaming
+### 4. Keyset Pagination & Memory-Safe Streaming
 
 #### Keyset / Cursor Pagination (`.cursorPaginate()`)
 Traditional `OFFSET` pagination degrades significantly on large tables because MySQL must scan and discard all rows before the offset. Keyset pagination uses constant-time index seeks (`WHERE id > ? ORDER BY id ASC LIMIT ?`):
@@ -903,6 +1079,17 @@ const page2 = await produtosHandler.cursorPaginate({
     after: page1.nextCursor
 });
 ```
+
+> [!TIP]
+> **Customização da Chave Primária (`cursorColumn`):**
+> O método `.cursorPaginate()` assume por padrão a coluna `'id'`. Se a tabela utilizar outra chave de ordenação ou chave primária (`uuid`, `codigo`, `cod_produto`), declare-a explicitamente:
+> ```javascript
+> const page = await produtosHandler.cursorPaginate({
+>     cursorColumn: 'codigo',
+>     limit: 20,
+>     after: lastCode
+> });
+> ```
 
 #### Streaming & Async Iterator (`for await ... of`)
 Export millions of rows to CSV or feed an ETL pipeline without triggering Node.js Heap Out of Memory errors:
@@ -921,14 +1108,27 @@ relatorioHandler.stream({ batchSize: 500 })
 
 ---
 
-### 4. Native Business Rules: Soft Deletes, Timestamps & Lifecycle Hooks
+### 5. Native Business Rules: Soft Deletes, Timestamps & Lifecycle Hooks
 
 ```javascript
-const clientesHandler = new DatabaseHandler(db, 'clientes', {
+const clientesHandler = new DataBaseHandler(db, 'clientes', {
     softDelete: 'deletado_em', // ou boolean true (padrão 'deletado_em')
     timestamps: true          // injeta criado_em e atualizado_em automaticamente
 });
 ```
+
+> [!TIP]
+> **Tabelas com Nomenclatura em Inglês (`deleted_at`, `created_at`, `updated_at`):**
+> Por padrão, a biblioteca assume as colunas em português (`deletado_em`, `criado_em`, `atualizado_em`). Se suas tabelas utilizam nomenclaturas em inglês, configure o objeto explicitamente:
+> ```javascript
+> const clientesHandler = new DataBaseHandler(db, 'customers_leads', {
+>     softDelete: 'deleted_at',
+>     timestamps: {
+>         createdAt: 'created_at',
+>         updatedAt: 'updated_at'
+>     }
+> });
+> ```
 
 #### Soft Deletes
 * `.delete(where)`: Automaticamente executa `UPDATE clientes SET deletado_em = NOW() WHERE ...`.
@@ -959,10 +1159,10 @@ clientesHandler
 
 ---
 
-### 5. Runtime Schema Validation (Auto-Strip) & Sensitive Field Masking
+### 6. Runtime Schema Validation (Auto-Strip) & Sensitive Field Masking
 
 ```javascript
-const usuariosHandler = new DatabaseHandler(db, 'usuarios', {
+const usuariosHandler = new DataBaseHandler(db, 'usuarios', {
     autoStripUnknown: true,                            // Remove propriedades desconhecidas do payload
     hiddenFields: ['senha_hash', 'token_recuperacao'] // Oculta campos confidenciais das consultas
 });

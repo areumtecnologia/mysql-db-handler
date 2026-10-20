@@ -7,6 +7,10 @@ const DataBaseHandler = require('./lib/databaseHandler');
 
 module.exports = {
     DataBase,
+    Database: DataBase,
     DataBaseHandler,
-    DataBaseCache
+    DatabaseHandler: DataBaseHandler,
+    DataBaseCache,
+    DatabaseCache: DataBaseCache,
+    raw: DataBaseHandler.raw
 };
