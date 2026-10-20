@@ -1,4 +1,5 @@
 // Áreum Tecnologia - Renan Moreira - renan.moreira@areum.com.br
+const DataBaseCache = require('./lib/database-cache');
 const DataBase = require('./lib/database');
 const DataBaseHandler = require('./lib/databaseHandler');
 // We do not export the singleton by default in a library usually, 
@@ -6,5 +7,6 @@ const DataBaseHandler = require('./lib/databaseHandler');
 
 module.exports = {
     DataBase,
-    DataBaseHandler
+    DataBaseHandler,
+    DataBaseCache
 };

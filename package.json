@@ -1,14 +1,16 @@
 {
   "name": "@areumtecnologia/mysql-db-handler",
-  "version": "1.0.8",
-  "description": "A powerful MySQL wrapper with connection pooling, singleton support, and advanced query handling for Node.js.",
+  "version": "2.0.0",
+  "description": "High-scale enterprise Micro-ORM and MySQL Data Mapper with connection pooling, read/write splitting, eager loading, keyset pagination, soft deletes, and fluent query builder for Node.js.",
   "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node tests/security_and_robustness.test.js && node tests/update_operators.test.js && node tests/selectToDatatable.test.js && node tests/transactions.test.js && node tests/customersSales.test.js && node tests/joins_and_eager_loading.test.js && node tests/read_write_splitting.test.js && node tests/streaming_and_cursor.test.js && node tests/soft_deletes_and_hooks.test.js && node tests/schema_validation_and_hidden.test.js"
   },
   "author": "Renan Moreira / Áreum Tecnologia",
   "license": "MIT",
   "dependencies": {
-    "mysql2": "^3.22.5"
+    "mysql2": "^3.24.4",
+    "node-cache": "^5.1.2"
   }
 }
