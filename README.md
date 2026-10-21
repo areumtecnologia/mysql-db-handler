@@ -522,9 +522,11 @@ app.post('/api/users/datatable', async (req, res) => {
 
 ---
 
-### Enforcing Backend Security (`strictCondition`)
+### Enforcing Backend Security & Custom Filters (`strictCondition`)
 
-Never rely on the client frontend to enforce data boundaries. Pass a `strictCondition` array to apply non-bypassable constraints. It shares the same query-building syntax as `select()`, supporting custom operators, arrays (`IN`), and `AND`/`OR` conjunctions:
+Never rely solely on client frontend parameters to enforce data boundaries or custom business filters. Pass `strictCondition` to apply non-bypassable constraints.
+
+`strictCondition` supports both **Array syntax** (with custom operators, arrays mapped to `IN`, and explicit `'AND'`/`'OR'`) and **Plain Object syntax** (multiple properties are automatically combined with `AND`):
 
 ```javascript
 app.post('/api/orders/datatable', async (req, res) => {
@@ -542,17 +544,39 @@ app.post('/api/orders/datatable', async (req, res) => {
 });
 ```
 
-> [!IMPORTANT]
-> **Regra Obrigatória para Múltiplas Condições em `strictCondition`:**
-> Sempre forneça `strictCondition` no formato de **Array de Objetos** com conectivos explícitos (`'AND'` / `'OR'`). Se for passado um objeto único contendo múltiplas propriedades (como `{ tenant_id: 1, status: 'active' }`), o parser interno processará **apenas a primeira chave** e descartará as demais silenciosamente:
-> ```javascript
-> // Correto:
-> strictCondition: [
->     { 'pedidos.empresa_id': req.user.empresaId },
->     'AND',
->     { 'pedidos.ativo': 1 }
-> ]
-> ```
+---
+
+### Handling Custom Frontend Filters (e.g., Status, Dates, Categories)
+
+When users apply custom UI filters (dropdowns, datepickers, checkboxes) alongside DataTables, capture them in your controller and pass them into `strictCondition`:
+
+```javascript
+app.post('/api/clientes/datatable', async (req, res) => {
+    const filters = [];
+
+    // Map UI filter (e.g. 'HABILITADO') to database column ('active' = 1 / 0)
+    if (req.body.status) {
+        filters.push({ active: req.body.status === 'HABILITADO' ? 1 : 0 });
+    }
+
+    if (req.body.created_after) {
+        if (filters.length > 0) filters.push('AND');
+        filters.push({ created_at: req.body.created_after, operator: '>=' });
+    }
+
+    // Pass request body + backend-mapped filters
+    const result = await clientesHandler.selectToDatatable(req.body, filters);
+    res.json(result);
+});
+```
+
+> [!TIP]
+> **DataTables Modern Protocol Support (v1.10, v2.x, v3.x):**
+> `selectToDatatable` automatically normalizes:
+> - **Search**: supports standard `{ value: '...', regex: false }`, direct strings (`search: '...'`), and query fallbacks (`q`).
+> - **Columns**: accepts both standard `Array` and index-keyed objects (`{ '0': {...}, '1': {...} }`).
+> - **Ordering**: supports ordering by column index (`order: [{ column: 0, dir: 'asc' }]`) and by column name (`order: [{ name: 'col_name', dir: 'desc' }]`).
+> - **Payload collision**: prevents bracketed keys (`search[value]`) from being corrupted by flat parameters.
 
 ---
 

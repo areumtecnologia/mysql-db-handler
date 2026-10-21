@@ -184,7 +184,7 @@ export class DataBaseHandler<T = RowDataPacket> {
 
     // Core Operations
     paginate(options?: PaginateOptions): Promise<PaginatedResult<T>>;
-    selectToDatatable(rawDtQuery: Record<string, any>, strictCondition?: any[]): Promise<{
+    selectToDatatable(rawDtQuery: Record<string, any>, strictCondition?: any[] | Record<string, any>): Promise<{
         draw: number;
         recordsTotal: number;
         recordsFiltered: number;
