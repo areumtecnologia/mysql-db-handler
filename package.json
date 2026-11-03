@@ -1,11 +1,11 @@
 {
   "name": "@areumtecnologia/mysql-db-handler",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "High-scale enterprise Micro-ORM and MySQL Data Mapper with connection pooling, read/write splitting, eager loading, keyset pagination, soft deletes, and fluent query builder for Node.js.",
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
-    "test": "node tests/security_and_robustness.test.js && node tests/update_operators.test.js && node tests/selectToDatatable.test.js && node tests/transactions.test.js && node tests/customersSales.test.js && node tests/joins_and_eager_loading.test.js && node tests/read_write_splitting.test.js && node tests/streaming_and_cursor.test.js && node tests/soft_deletes_and_hooks.test.js && node tests/schema_validation_and_hidden.test.js"
+    "test": "node tests/security_and_robustness.test.js && node tests/update_operators.test.js && node tests/selectToDatatable.test.js && node tests/transactions.test.js && node tests/customersSales.test.js && node tests/joins_and_eager_loading.test.js && node tests/read_write_splitting.test.js && node tests/streaming_and_cursor.test.js && node tests/soft_deletes_and_hooks.test.js && node tests/schema_validation_and_hidden.test.js && node tests/operators.test.js"
   },
   "author": "Renan Moreira / Áreum Tecnologia",
   "license": "MIT",

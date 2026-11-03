@@ -1,5 +1,86 @@
 import { Pool, PoolConnection, PoolOptions, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
+export const ArithmeticOperator: {
+    readonly ADD: '+';
+    readonly PLUS: '+';
+    readonly SUBTRACT: '-';
+    readonly MINUS: '-';
+    readonly MULTIPLY: '*';
+    readonly DIVIDE: '/';
+    readonly MODULO: '%';
+    readonly MOD: 'MOD';
+    readonly DIV: 'DIV';
+    readonly INTEGER_DIVIDE: 'DIV';
+};
+
+export const ComparisonOperator: {
+    readonly EQUALS: '=';
+    readonly EQUAL: '=';
+    readonly EQ: '=';
+    readonly NOT_EQUALS: '!=';
+    readonly NOT_EQUAL: '!=';
+    readonly NEQ: '!=';
+    readonly NOT_EQUALS_ALT: '<>';
+    readonly DIFFERENT: '<>';
+    readonly GREATER_THAN: '>';
+    readonly GT: '>';
+    readonly LESS_THAN: '<';
+    readonly LT: '<';
+    readonly GREATER_THAN_OR_EQUAL: '>=';
+    readonly GTE: '>=';
+    readonly LESS_THAN_OR_EQUAL: '<=';
+    readonly LTE: '<=';
+    readonly BETWEEN: 'BETWEEN';
+    readonly NOT_BETWEEN: 'NOT BETWEEN';
+    readonly IN: 'IN';
+    readonly NOT_IN: 'NOT IN';
+    readonly LIKE: 'LIKE';
+    readonly NOT_LIKE: 'NOT LIKE';
+    readonly IS_NULL: 'IS NULL';
+    readonly IS_NOT_NULL: 'IS NOT NULL';
+    readonly IS: 'IS';
+    readonly IS_NOT: 'IS NOT';
+    readonly REGEXP: 'REGEXP';
+    readonly NOT_REGEXP: 'NOT REGEXP';
+};
+
+export const LogicalOperator: {
+    readonly AND: 'AND';
+    readonly OR: 'OR';
+    readonly NOT: 'NOT';
+    readonly NOT_ALT: '!';
+    readonly BANG: '!';
+};
+
+export const BitwiseOperator: {
+    readonly AND: '&';
+    readonly BITWISE_AND: '&';
+    readonly OR: '|';
+    readonly BITWISE_OR: '|';
+    readonly XOR: '^';
+    readonly BITWISE_XOR: '^';
+    readonly RIGHT_SHIFT: '>>';
+    readonly LEFT_SHIFT: '<<';
+    readonly SHR: '>>';
+    readonly SHL: '<<';
+};
+
+export const Operators: {
+    readonly Arithmetic: typeof ArithmeticOperator;
+    readonly Comparison: typeof ComparisonOperator;
+    readonly Logical: typeof LogicalOperator;
+    readonly Bitwise: typeof BitwiseOperator;
+    readonly Aritmeticos: typeof ArithmeticOperator;
+    readonly Comparacao: typeof ComparisonOperator;
+    readonly Logicos: typeof LogicalOperator;
+    readonly BitwisePT: typeof BitwiseOperator;
+};
+
+export type ArithmeticOperatorType = typeof ArithmeticOperator[keyof typeof ArithmeticOperator];
+export type ComparisonOperatorType = typeof ComparisonOperator[keyof typeof ComparisonOperator];
+export type LogicalOperatorType = typeof LogicalOperator[keyof typeof LogicalOperator];
+export type BitwiseOperatorType = typeof BitwiseOperator[keyof typeof BitwiseOperator];
+
 export type IsolationLevel = 'READ UNCOMMITTED' | 'READ COMMITTED' | 'REPEATABLE READ' | 'SERIALIZABLE';
 
 export interface ExtendedDatabaseConfig extends PoolOptions {
@@ -131,6 +212,12 @@ export class DataBaseHandler<T = RowDataPacket> {
     onError: ((err: Error) => void) | null;
     options: DatabaseHandlerOptions;
 
+    static readonly ArithmeticOperator: typeof ArithmeticOperator;
+    static readonly ComparisonOperator: typeof ComparisonOperator;
+    static readonly LogicalOperator: typeof LogicalOperator;
+    static readonly BitwiseOperator: typeof BitwiseOperator;
+    static readonly Operators: typeof Operators;
+
     static raw(sql: string): { __isRawSql: true; sql: string };
     static hasMany(handler: DataBaseHandler<any>, foreignKey: string, localKey?: string): RelationDefinition;
     static belongsTo(handler: DataBaseHandler<any>, foreignKey: string, localKey?: string): RelationDefinition;
@@ -142,10 +229,10 @@ export class DataBaseHandler<T = RowDataPacket> {
     executeQuery(sql: string, params?: any, isWrite?: boolean, options?: Record<string, any>): Promise<any>;
 
     // Fluent Joins
-    join(table: string, first: string, operator: string, second: string): DataBaseHandler<T>;
-    leftJoin(table: string, first: string, operator: string, second: string): DataBaseHandler<T>;
-    rightJoin(table: string, first: string, operator: string, second: string): DataBaseHandler<T>;
-    innerJoin(table: string, first: string, operator: string, second: string): DataBaseHandler<T>;
+    join(table: string, first: string, operator: ComparisonOperatorType | string, second: string): DataBaseHandler<T>;
+    leftJoin(table: string, first: string, operator: ComparisonOperatorType | string, second: string): DataBaseHandler<T>;
+    rightJoin(table: string, first: string, operator: ComparisonOperatorType | string, second: string): DataBaseHandler<T>;
+    innerJoin(table: string, first: string, operator: ComparisonOperatorType | string, second: string): DataBaseHandler<T>;
 
     // Eager Loading (N+1 Elimination)
     with(relationName: string, relationOrHandler: RelationDefinition | DataBaseHandler<any>): DataBaseHandler<T>;
@@ -166,8 +253,8 @@ export class DataBaseHandler<T = RowDataPacket> {
 
     // Fluent Query Builder
     selectFields(fields: string | string[] | Array<string | { column: string; as: string } | { raw: string }>): DataBaseHandler<T>;
-    where(columnOrObject: string | Record<string, any> | any[], operatorOrValue?: any, value?: any): DataBaseHandler<T>;
-    orWhere(columnOrObject: string | Record<string, any>, operatorOrValue?: any, value?: any): DataBaseHandler<T>;
+    where(columnOrObject: string | Record<string, any> | any[], operatorOrValue?: ComparisonOperatorType | any, value?: any): DataBaseHandler<T>;
+    orWhere(columnOrObject: string | Record<string, any>, operatorOrValue?: ComparisonOperatorType | any, value?: any): DataBaseHandler<T>;
     groupBy(cols: string | string[]): DataBaseHandler<T>;
     having(sql: string, bindings?: any[]): DataBaseHandler<T>;
     orderBy(column: string, dir?: 'ASC' | 'DESC'): DataBaseHandler<T>;

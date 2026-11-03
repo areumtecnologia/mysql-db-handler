@@ -14,6 +14,12 @@ A powerful, robust, and production-ready MySQL wrapper for Node.js. It features 
   * [1. Initializing Connection](#1-initializing-connection)
   * [2. Executing Raw SQL](#2-executing-raw-sql)
   * [3. Using the DataBaseHandler](#3-using-the-databasehandler)
+* [Categorized Static Enumerators (No Magic Strings)](#categorized-static-enumerators-no-magic-strings)
+  * [1. Arithmetic Operators (`ArithmeticOperator`)](#1-operadores-aritméticos-arithmeticoperator--operatorsarithmetic)
+  * [2. Comparison Operators (`ComparisonOperator`)](#2-operadores-de-comparação-relacionais-comparisonoperator--operatorscomparison)
+  * [3. Logical Operators (`LogicalOperator`)](#3-operadores-lógicos-logicaloperator--operatorslogical)
+  * [4. Bitwise Operators (`BitwiseOperator`)](#4-operadores-bit-a-bit-bitwiseoperator--operatorsbitwise)
+  * [Usage Examples](#practical-usage-examples)
 * [Advanced Querying (`select` method)](#advanced-querying-select-method)
   * [Basic Selection](#basic-selection)
   * [Working with the `IN` and `NOT IN` Operators](#working-with-the-in-and-not-in-operators)
@@ -65,6 +71,7 @@ A powerful, robust, and production-ready MySQL wrapper for Node.js. It features 
 * **Post-Commit Hooks (`onCommit`):** Execute external tasks (banking APIs, emails, webhooks) strictly after database transactions successfully commit.
 * **Express Lazy Middleware:** Zero-code change transactions via `db.autoTransaction()`. Reads remain non-blocking on the pool, while write operations seamlessly open and commit transactions on demand.
 * **Savepoints (Nested Transactions):** Safely run sub-transactions with partial rollback support without aborting outer transactions.
+* **Categorized Static Enumerators:** Immutable (`Object.freeze`) enumerators (`ArithmeticOperator`, `ComparisonOperator`, `LogicalOperator`, `BitwiseOperator`) to completely eliminate magic strings and typo risks.
 * **Flexible Query Builder:** Run complex operations without writing manual SQL strings.
 * **Automatic `IN` Handling:** Smart processing of arrays for SQL `IN` and `NOT IN` operations (including prevention of empty array query crashes).
 * **Optional Caching Wrapper:** Native support for query and schema caching using `node-cache` (automatically bypassed during active transactions).
@@ -156,6 +163,156 @@ const usersHandler = new DataBaseHandler(db, 'users');
 
 ---
 
+## Categorized Static Enumerators (No Magic Strings)
+
+Para evitar erros de digitação ("strings mágicas"), garantir compatibilidade total com autocomplete de IDEs e elevar a segurança de tipos em JavaScript e TypeScript, a biblioteca disponibiliza **Enumeradores Estáticos Categorizados** imutáveis (`Object.freeze`).
+
+Os enumeradores podem ser importados diretamente da raiz do pacote ou acessados estaticamente através de `DataBaseHandler` / `DatabaseHandler`.
+
+```javascript
+const {
+    DataBaseHandler,
+    Operators,
+    ArithmeticOperator,
+    ComparisonOperator,
+    LogicalOperator,
+    BitwiseOperator
+} = require('@areumtecnologia/mysql-db-handler');
+
+// Também acessíveis diretamente na classe:
+// DataBaseHandler.ArithmeticOperator
+// DataBaseHandler.ComparisonOperator
+// DataBaseHandler.LogicalOperator
+// DataBaseHandler.BitwiseOperator
+// DataBaseHandler.Operators
+```
+
+---
+
+### 1. Operadores Aritméticos (`ArithmeticOperator` / `Operators.Arithmetic`)
+
+Usados para realizar cálculos matemáticos com dados numéricos:
+
+| Chave / Propriedade | Valor SQL | Descrição |
+| :--- | :--- | :--- |
+| `ArithmeticOperator.ADD` / `PLUS` | `+` | Adição (Soma) |
+| `ArithmeticOperator.SUBTRACT` / `MINUS` | `-` | Subtração |
+| `ArithmeticOperator.MULTIPLY` | `*` | Multiplicação |
+| `ArithmeticOperator.DIVIDE` | `/` | Divisão |
+| `ArithmeticOperator.MODULO` / `MOD` | `%` ou `MOD` | Módulo (resto da divisão inteira) |
+| `ArithmeticOperator.DIV` / `INTEGER_DIVIDE` | `DIV` | Divisão inteira (descarta a parte decimal) |
+
+*Alias alternativo:* `Operators.Aritmeticos`
+
+---
+
+### 2. Operadores de Comparação (Relacionais) (`ComparisonOperator` / `Operators.Comparison`)
+
+Usados para comparar dois valores e retornar verdadeiro (1), falso (0) ou `NULL`:
+
+| Chave / Propriedade | Valor SQL | Descrição |
+| :--- | :--- | :--- |
+| `ComparisonOperator.EQUALS` / `EQUAL` / `EQ` | `=` | Igual a |
+| `ComparisonOperator.NOT_EQUALS` / `NOT_EQUAL` / `NEQ` | `!=` | Diferente de |
+| `ComparisonOperator.NOT_EQUALS_ALT` / `DIFFERENT` | `<>` | Diferente de (sintaxe alternativa SQL) |
+| `ComparisonOperator.GREATER_THAN` / `GT` | `>` | Maior que |
+| `ComparisonOperator.LESS_THAN` / `LT` | `<` | Menor que |
+| `ComparisonOperator.GREATER_THAN_OR_EQUAL` / `GTE` | `>=` | Maior ou igual a |
+| `ComparisonOperator.LESS_THAN_OR_EQUAL` / `LTE` | `<=` | Menor ou igual a |
+| `ComparisonOperator.BETWEEN` / `NOT_BETWEEN` | `BETWEEN` / `NOT BETWEEN` | Verifica se o valor está dentro de um intervalo |
+| `ComparisonOperator.IN` / `NOT_IN` | `IN` / `NOT IN` | Verifica se o valor corresponde a qualquer elemento de uma lista |
+| `ComparisonOperator.LIKE` / `NOT_LIKE` | `LIKE` / `NOT LIKE` | Compara padrões de texto (usado com coringas `%` e `_`) |
+| `ComparisonOperator.IS_NULL` | `IS NULL` | Testa se um valor é nulo |
+| `ComparisonOperator.IS_NOT_NULL` | `IS NOT NULL` | Testa se um valor não é nulo |
+| `ComparisonOperator.IS` / `IS_NOT` | `IS` / `IS NOT` | Avaliação de predicados de identidade/nulidade |
+| `ComparisonOperator.REGEXP` / `NOT_REGEXP` | `REGEXP` / `NOT REGEXP` | Validação por expressão regular |
+
+*Alias alternativo:* `Operators.Comparacao`
+
+---
+
+### 3. Operadores Lógicos (`LogicalOperator` / `Operators.Logical`)
+
+Usados para combinar múltiplas condições em uma consulta:
+
+| Chave / Propriedade | Valor SQL | Descrição |
+| :--- | :--- | :--- |
+| `LogicalOperator.AND` | `AND` | Retorna verdadeiro se todas as condições forem verdadeiras |
+| `LogicalOperator.OR` | `OR` | Retorna verdadeiro se pelo menos uma das condições for verdadeira |
+| `LogicalOperator.NOT` / `BANG` / `NOT_ALT` | `NOT` ou `!` | Inverte o valor lógico (transforma verdadeiro em falso e vice-versa) |
+
+*Alias alternativo:* `Operators.Logicos`
+
+---
+
+### 4. Operadores Bit a Bit (`BitwiseOperator` / `Operators.Bitwise`)
+
+Realizam operações em nível de bits:
+
+| Chave / Propriedade | Valor SQL | Descrição |
+| :--- | :--- | :--- |
+| `BitwiseOperator.AND` / `BITWISE_AND` | `&` | E bit a bit (AND) |
+| `BitwiseOperator.OR` / `BITWISE_OR` | `\|` | OU bit a bit (OR) |
+| `BitwiseOperator.XOR` / `BITWISE_XOR` | `^` | OU exclusivo bit a bit (XOR) |
+| `BitwiseOperator.RIGHT_SHIFT` / `SHR` | `>>` | Deslocamento à direita (Right shift) |
+| `BitwiseOperator.LEFT_SHIFT` / `SHL` | `<<` | Deslocamento à esquerda (Left shift) |
+
+*Alias alternativo:* `Operators.BitwisePT`
+
+---
+
+### Practical Usage Examples
+
+#### 1. Encadeamento Fluente (`where` e `orWhere`)
+```javascript
+const { DataBaseHandler, ComparisonOperator } = require('@areumtecnologia/mysql-db-handler');
+
+// Consultas sem nenhuma string mágica
+const produtos = await produtosHandler
+    .where('preco', ComparisonOperator.GREATER_THAN_OR_EQUAL, 150)
+    .where('categoria', ComparisonOperator.EQUALS, 'informatica')
+    .orWhere('em_promocao', ComparisonOperator.EQUALS, 1)
+    .get();
+
+// Verificação de Nulos elegante com 2 argumentos
+const ativos = await produtosHandler
+    .where('deletado_em', ComparisonOperator.IS_NULL)
+    .where('publicado_em', ComparisonOperator.IS_NOT_NULL)
+    .get();
+
+// Intervalos e Listas
+const resultado = await produtosHandler
+    .where('data_criacao', ComparisonOperator.BETWEEN, ['2026-01-01', '2026-12-31'])
+    .where('nome', ComparisonOperator.LIKE, 'Notebook%')
+    .where('status', ComparisonOperator.IN, ['estoque', 'encomenda'])
+    .get();
+```
+
+#### 2. Joins Fluentes
+```javascript
+const pedidos = await pedidosHandler
+    .selectFields(['pedidos.id', 'pedidos.total', 'clientes.nome'])
+    .join('clientes', 'pedidos.cliente_id', ComparisonOperator.EQUALS, 'clientes.id')
+    .where('pedidos.status', ComparisonOperator.NOT_EQUALS, 'cancelado')
+    .get();
+```
+
+#### 3. Mutações e Condições em Array (`update` e `delete`)
+```javascript
+const { LogicalOperator, ComparisonOperator } = require('@areumtecnologia/mysql-db-handler');
+
+await produtosHandler.update({
+    set: { status: 'arquivado' },
+    where: [
+        { estoque: 0, operator: ComparisonOperator.EQUALS },
+        LogicalOperator.OR,
+        { descontinuado: 1, operator: ComparisonOperator.EQUALS }
+    ]
+});
+```
+
+---
+
 ## Advanced Querying (`select` method)
 
 The `select(params, clauses)` method builds complex SQL `WHERE` clauses from arrays of condition objects.
@@ -188,12 +345,12 @@ const activeUsers = await usersHandler.select([
 ```
 
 #### Explicit `IN` / `NOT IN` Operator
-You can explicitly define the `operator` as `'IN'` or `'NOT IN'`:
+You can explicitly define the `operator` as `'IN'` or `'NOT IN'` (or using `ComparisonOperator.IN` / `ComparisonOperator.NOT_IN` to eliminate magic strings):
 
 ```javascript
-// Using NOT IN explicitly
+// Using ComparisonOperator.NOT_IN explicitly
 const nonAdminUsers = await usersHandler.select([
-    { role: ['admin', 'superadmin'], operator: 'NOT IN' }
+    { role: ['admin', 'superadmin'], operator: ComparisonOperator.NOT_IN }
 ]);
 // Executes: SELECT * FROM users WHERE `role` NOT IN (?, ?)
 // Bindings: ['admin', 'superadmin']

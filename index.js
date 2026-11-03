@@ -2,6 +2,13 @@
 const DataBaseCache = require('./lib/database-cache');
 const DataBase = require('./lib/database');
 const DataBaseHandler = require('./lib/databaseHandler');
+const {
+    ArithmeticOperator,
+    ComparisonOperator,
+    LogicalOperator,
+    BitwiseOperator,
+    Operators
+} = require('./lib/operators');
 // We do not export the singleton by default in a library usually, 
 // but we export the classes so the user can instantiate them.
 
@@ -12,5 +19,11 @@ module.exports = {
     DatabaseHandler: DataBaseHandler,
     DataBaseCache,
     DatabaseCache: DataBaseCache,
-    raw: DataBaseHandler.raw
+    raw: DataBaseHandler.raw,
+    // Categorized Static Enumerators
+    Operators,
+    ArithmeticOperator,
+    ComparisonOperator,
+    LogicalOperator,
+    BitwiseOperator
 };
